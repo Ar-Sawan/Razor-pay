@@ -87,13 +87,34 @@ const updateReimbursementStatus = async (req, res, next) => {
       if (!relationship) {
         return res.status(403).json({ status: "error", message: "Forbidden: Employee is not your direct subordinate" });
       }
+
+      // Enforce sequential check: Claim must be pending at both RM and APE level
+      if (claim.rm_approval !== 'PENDING' || claim.ape_approval !== 'PENDING') {
+        return res.status(400).json({ status: "error", message: "Claim has already been processed or is not in RM approval stage" });
+      }
+
       updatePayload = { rm_approval: status };
     } 
     else if (userRole === 'APE') {
+      // Enforce sequential check: Claim must be approved by RM first
+      if (claim.rm_approval !== 'APPROVED') {
+        return res.status(400).json({ status: "error", message: "Forbidden: Claims must be approved by a Reporting Manager before Accounts Payable audit" });
+      }
+      
+      // Claim must be pending at APE level
+      if (claim.ape_approval !== 'PENDING') {
+        return res.status(400).json({ status: "error", message: "Claim has already been processed at APE level" });
+      }
+
       updatePayload = { ape_approval: status };
     } 
     else if (userRole === 'CFO') {
-      // CFO can override or bypass specific constraints directly [cite: 160]
+      // Enforce sequential check: Claim must be approved by both RM and APE first
+      if (claim.rm_approval !== 'APPROVED' || claim.ape_approval !== 'APPROVED') {
+        return res.status(400).json({ status: "error", message: "Claims must be approved by both RM and APE before final CFO review" });
+      }
+
+      // CFO final override or settle action
       updatePayload = { rm_approval: status, ape_approval: status };
     }
 
@@ -152,7 +173,8 @@ const getReimbursementsPipeline = async (req, res, next) => {
         .from('reimbursements')
         .select('*')
         .in('employee_id', subIds)
-        .eq('rm_approval', 'PENDING');
+        .eq('rm_approval', 'PENDING')
+        .eq('ape_approval', 'PENDING');
 
       if (error) throw error;
       claims = data;
@@ -173,6 +195,7 @@ const getReimbursementsPipeline = async (req, res, next) => {
       const { data, error } = await supabase
         .from('reimbursements')
         .select('*')
+        .eq('rm_approval', 'APPROVED')
         .eq('ape_approval', 'APPROVED');
 
       if (error) throw error;
