@@ -3,14 +3,19 @@ const cookieParser = require('cookie-parser');
 require('dotenv').config();
 
 const app = express();
-const PORT = process.env.PORT || 7002;
+const PORT = process.env.PORT || 7002; // Binds to Render's port dynamically
 const apiRouter = require('./routes');
 
-// Middlewares
+// Standard Middlewares
 app.use(express.json());
 app.use(cookieParser());
 
-// Mount API specification prefix
+// 1. Root-level Health Check (Put this BEFORE app.use('/rest'))
+app.get('/health', (req, res) => {
+  res.status(200).json({ status: "healthy", timestamp: new Date() });
+});
+
+// 2. Mount API specification prefix
 app.use('/rest', apiRouter);
 
 // Global Error Handler
