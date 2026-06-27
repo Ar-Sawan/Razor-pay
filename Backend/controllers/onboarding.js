@@ -16,11 +16,16 @@ const register = async (req, res, next) => {
 
   try {
     // Check if user already exists
-    const { data: existingUser } = await supabase
+    const { data: existingUser, error: lookupError } = await supabase
       .from('users')
       .select('id')
       .eq('email', email)
       .maybeSingle();
+
+    if (lookupError) {
+      console.error('User lookup failed:', lookupError);
+      return res.status(500).json({ status: "error", message: "User lookup failed" });
+    }
 
     if (existingUser) {
       return res.status(400).json({ status: "error", message: "Email is already registered" });
@@ -31,13 +36,17 @@ const register = async (req, res, next) => {
     const hashedPassword = await bcrypt.hash(password, salt);
 
     // Save to database - default role is ALWAYS 'EMP'
+    const insertPayload = { name, email, password: hashedPassword };
     const { data: newUser, error } = await supabase
       .from('users')
-      .insert([{ name, email, password: hashedPassword, role: 'EMP' }])
-      .select('id', 'name', 'email', 'role')
+      .insert([insertPayload])
+      .select('id', 'name', 'email')
       .single();
 
-    if (error) throw error;
+    if (error) {
+      console.error('User registration failed:', error);
+      return res.status(500).json({ status: "error", message: "Registration failed" });
+    }
 
     return res.status(201).json({ status: "success", data: { user: newUser } });
   } catch (err) {
@@ -64,6 +73,7 @@ const login = async (req, res, next) => {
       .maybeSingle();
 
     if (!user || error) {
+      console.error('Login lookup failed:', error);
       return res.status(401).json({ status: "error", message: "Invalid email or password" });
     }
 
@@ -86,7 +96,7 @@ const login = async (req, res, next) => {
     return res.status(200).json({
       status: "success",
       data: {
-        user: { id: user.id, name: user.name, email: user.email, role: user.role }
+        user: { id: user.id, name: user.name, email: user.email, role: user.role || 'EMP' }
       }
     });
   } catch (err) {
