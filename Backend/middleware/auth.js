@@ -16,16 +16,19 @@ const authenticateToken = async (req, res, next) => {
     // Fetch the user from the Supabase users table to get their absolute latest role status
     const { data: user, error } = await supabase
       .from('users')
-      .select('id, name, email, role')
+      .select('id, name, email')
       .eq('id', decoded.id)
-      .single();
+      .maybeSingle();
 
     if (error || !user) {
       return res.status(401).json({ status: "error", message: "User session invalid or unauthorized" });
     }
 
     // Attach user record context seamlessly to the request scope
-    req.user = user;
+    req.user = {
+      ...user,
+      role: user.role || 'EMP'
+    };
     next();
   } catch (err) {
     return res.status(403).json({ status: "error", message: "Token has expired or is invalid" });
